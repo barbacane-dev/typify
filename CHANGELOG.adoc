@@ -13,6 +13,12 @@
 
 == Unreleased changes (barbacane-dev fork)
 
+https://github.com/barbacane-dev/typify/compare/v1.0.0\...HEAD[Full list of commits]
+
+== 1.0.0 (released 2026-05-13)
+
+First major release of the barbacane-dev fork. Aggregates every fix and feature carried since the 0.6.1 upstream baseline. Bumped to 1.0.0 to signal that this fork is now an independent line of development with at least one wire-format breaking change.
+
 === Bug fixes
 * fix untagged enum variant ordering: Integer now comes before Number to prevent unreachable deserialization (#991)
 * generate `Default` impl for structs where all required fields have explicit defaults (#918)
@@ -42,7 +48,7 @@
 * `cargo typify` CLI: new `--schema-dir` flag to specify external schema directory
 * `cargo typify` CLI: automatic 2020-12 normalization (no flags needed)
 
-https://github.com/barbacane-dev/typify/compare/v0.6.1\...HEAD[Full list of commits]
+https://github.com/barbacane-dev/typify/compare/v0.6.1\...v1.0.0[Full list of commits]
 
 == 0.6.1 (released 2026-02-10)
 

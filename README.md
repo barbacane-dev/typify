@@ -1,150 +1,271 @@
-# Typify
+# Typify (barbacane-dev fork)
 
-Typify compiles JSON Schema documents into Rust types. It can be used in one of
-several ways:
+Typify compiles JSON Schema documents into Rust types. This is the
+[barbacane-dev fork](https://github.com/barbacane-dev/typify), an
+independently maintained line of development based on
+[oxidecomputer/typify 0.6.1](https://github.com/oxidecomputer/typify) and
+extended with broader JSON Schema support, more conformant code generation,
+and a handful of long-standing bug fixes. See
+[What's new vs upstream](#whats-new-vs-upstream) for the change set.
 
-- using the [`cargo typify`](./cargo-typify/README.md) command
+There are three ways to use typify:
 
-- via the macro `import_types!("types.json")` to generate Rust types directly in
-  your program
+- the `cargo typify` command (see [`cargo-typify/README.md`](./cargo-typify/README.md))
+- the `import_types!("types.json")` macro to generate Rust types directly in your program
+- the `TypeSpace` builder API for use in `build.rs`, `xtask`, or stand-alone generators
 
-- via a builder interface to generate Rust types in `build.rs` or `xtask`
+**If generation fails, doesn't compile, or is generally lousy**: please
+file an issue and include the JSON Schema and Rust output (if there is
+any). Use the `cargo typify` command to generate code from the command
+line. It is even more helpful if you can articulate the output you'd
+ideally like to see.
 
-- via the builder functions to generate persistent files e.g. when building
-  API bindings
+## Install
 
-**If generation fails, doesn't compile or is generally lousy**: Please file an
-issue and include the JSON Schema and Rust output (if there is any). Use `cargo
-typify` command to generate code from the command-line. It's even more helpful
-if you can articulate the output you'd ideally like to see.
+This fork is **git-only** — there is no crates.io publication. Depend
+on a tagged release directly in `Cargo.toml`:
+
+```toml
+[dependencies]
+typify = { git = "https://github.com/barbacane-dev/typify", tag = "v1.0.0" }
+```
+
+Or, for the macro / builder use case:
+
+```toml
+[dependencies]
+typify = { git = "https://github.com/barbacane-dev/typify", tag = "v1.0.0" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+```
+
+For `cargo typify`, install the binary from the same tag:
+
+```console
+$ cargo install --git https://github.com/barbacane-dev/typify --tag v1.0.0 cargo-typify
+```
+
+## Quick start
+
+### Macro
+
+```rust
+use typify::import_types;
+
+import_types!(schema = "schema.json");
+```
+
+### Builder
+
+```rust
+use typify::{TypeSpace, TypeSpaceSettings};
+
+let content = std::fs::read_to_string("schema.json")?;
+let schema = serde_json::from_str(&content)?;
+
+let mut type_space = TypeSpace::new(TypeSpaceSettings::default().with_struct_builder(true));
+type_space.add_schema_from_value(schema)?;
+
+// `to_stream()` returns a `TokenStream` — pair with prettyplease or rustfmt:
+let code = prettyplease::unparse(&syn::parse2::<syn::File>(type_space.to_stream())?);
+std::fs::write("generated.rs", code)?;
+```
+
+### CLI
+
+```console
+$ cargo typify schema.json                 # writes schema.rs next to schema.json
+$ cargo typify schema.json --output -      # to stdout
+$ cargo typify schema.json --schema-dir ./schemas/    # bundle external $refs
+```
+
+## What's new vs upstream
+
+This fork carries every change in 1.0.0 on top of upstream 0.6.1. The
+full list lives in [`CHANGELOG.adoc`](./CHANGELOG.adoc); the highlights:
+
+**New JSON Schema features**
+
+- JSON Schema **2020-12 and 2019-09** support via automatic
+  normalization. `$defs`, `prefixItems`, `dependentRequired`,
+  `dependentSchemas`, `unevaluatedProperties`, and `$dynamicRef` are
+  transparently lowered to draft-07 before processing.
+- **External `$ref`** support: a schema can reference types in other
+  files. Use `TypeSpace::add_schema_with_externals()`, or pass
+  `--schema-dir` to `cargo typify`.
+- **Non-`$defs` internal `$ref`** support: any JSON Pointer path
+  (`#/properties/foo`) resolves correctly, not just
+  `#/definitions/...` / `#/$defs/...`.
+- **`if` / `then` / `else`** support via transformation to `oneOf`.
+
+**More conformant code generation**
+
+- Untagged enum variants are ordered Integer-before-Number, so JSON
+  numbers deserialize to the narrower variant when both fit.
+- Bounded integer newtypes get `TryFrom` (enforcing min/max) instead of `From`.
+- Bounded integer ranges like `[1..32]` use the smallest fitting type
+  (`NonZeroU8`) instead of `NonZeroU64`.
+- 2020-12 `prefixItems` + `items: false` generates a Rust tuple.
+- `anyOf` overhauled: the previous broken flattened-struct output is
+  replaced with proper `#[serde(untagged)]` enum generation, including
+  for primitive variants and mixed object/primitive schemas.
+- `not` schemas no longer panic; complex `not` falls back to
+  `serde_json::Value`, enumerated `not` becomes a deny-list newtype.
+- `patternProperties` and `propertyNames` no longer panic on edge cases.
+
+**Fixes**
+
+- Multi-type `type: [a, b, c]` unions combined with `oneOf`/`anyOf`/`allOf`/`not`
+  no longer silently drop variants.
+- `required` fields with intrinsic-default Rust types (`Vec`, `HashMap`, `Option<T>`)
+  now honour the schema's wire contract — see
+  [Migration notes from 0.6.1](#migration-notes-from-061).
+- Special characters in enum variant names (`=`, `>`, `≥`, etc.) no
+  longer panic.
+- Integer `minimum`/`maximum` render as integers (not floats) in doc comments.
+- The bundler correctly pulls in and rewrites sibling refs inside
+  bundled external schemas.
+- All known panics in `ref_key()`, `convert_reference()`, etc. are
+  replaced with proper error returns.
+
+**Quality of life**
+
+- `TypeSpace::add_schema_from_value()` — auto-detects and normalizes
+  any JSON Schema draft.
+- `TypeSpace::add_schema_with_externals()` — handles multi-file schema bundles.
+- `cargo typify`: auto-discovers external schemas from the input
+  directory; `--schema-dir` for explicit control; transparent 2020-12
+  normalization (no flag required).
+
+## Migration notes from 0.6.1
+
+The 1.0.0 release contains one **wire-format** change. Schema-level
+behaviour and Rust API are otherwise additive.
+
+### Required fields with intrinsic Rust defaults
+
+In 0.6.1, when the schema marked a field `required` but the Rust type
+had an intrinsic default (`Vec`, `HashMap`, `Option<T>`), the
+generated code applied both `#[serde(default)]` and
+`skip_serializing_if`. Deserialize was lenient, but serialize silently
+**omitted** the field when it was empty — violating the schema's
+`required` contract.
+
+1.0.0 promotes those fields to a new internal state that emits
+`#[serde(default)]` alone. Deserialize stays lenient, but serialize
+**always** renders the field.
+
+For schema `{ required: ["tags"], properties: { tags: { type: "array" } } }`
+and value `Foo { tags: vec![] }`:
+
+| | 0.6.1 | 1.0.0 |
+|---|---|---|
+| Deserialize `{}` | OK | OK |
+| Serialize `Foo { tags: vec![] }` | `{}` | `{"tags":[]}` |
+
+**What you need to do**: if any downstream consumer compares
+serialized output byte-for-byte (snapshot tests, diff-based audit
+tools, mock servers), expect previously-omitted required fields to
+appear as `[]`, `{}`, or `null`. Payload size grows accordingly. Round
+trips are now lossless.
 
 ## JSON Schema → Rust types
 
-JSON Schema is a constraint language designed for validation. As a result, it
-is not well-suited--and is often seemingly hostile--to translation into
-constructive type systems. It allows for expressions of arbitrary complexity
-with an infinity of ways to articulate a given set of constraints. As such,
-typify does its best to discern an appropriate interpretation, but it is far
-from perfect!
-
-Typify translates JSON Schema types in a few different ways depending on some
-basic properties of the schema:
+JSON Schema is a constraint language designed for validation. As a
+result, it is not well-suited — and is often seemingly hostile — to
+translation into constructive type systems. It allows for expressions
+of arbitrary complexity with an infinity of ways to articulate a given
+set of constraints. Typify does its best to discern an appropriate
+interpretation, but it is far from perfect.
 
 ### Built-in types
 
-Integers, floating-point numbers, strings, etc. Those all have straightforward
-representations in Rust. The only significant nuance is how to select the
-appropriate built-in type based on type attributes. For example, a JSON Schema
-might specify a maximum and/or minimum that indicates the appropriate integral
-type to use.
-
-String schemas that include a known `format` are represented with the
-appropriate Rust type. For example `{ "type": "string", "format": "uuid" }` is
-represented as a `uuid::Uuid` (which requires the `uuid` crate be included as a
-dependency).
+Integers, floating-point numbers, strings, etc. all have
+straightforward representations in Rust. The only significant nuance
+is selecting the appropriate built-in type based on type attributes:
+for example, a JSON Schema with `minimum`/`maximum` indicates the
+appropriate integral type to use, and a `format` like `"uuid"` maps to
+`uuid::Uuid` (requiring the `uuid` crate as a dependency).
 
 ### Arrays
 
-JSON Schema arrays can turn into one of three Rust types `Vec<T>`, `HashSet<T>`,
-and tuples depending on the schema properties. An array may have a fixed length
-that matches a fixed list of item types; this is well represented by a Rust
-tuple. The distinction between `Vec<T>` and `HashSet<T>` is only if the
-schema's `uniqueItems` field is `false` or `true` respectively.
+JSON Schema arrays turn into one of three Rust types: `Vec<T>`,
+`HashSet<T>`, or a tuple. An array may have a fixed length that
+matches a fixed list of item types (via `prefixItems` + `items: false`
+in 2020-12, or the legacy `items` array form); this becomes a Rust
+tuple. `uniqueItems: true` produces `HashSet<T>`; otherwise `Vec<T>`.
 
 ### Objects
 
-In general, objects turn into Rust structs. If, however, the schema defines no
-properties, Typify emits a `HashMap<String, T>` if the `additionalProperties`
-schema specifies `T` or a `HashMap<String, serde_json::Value>` otherwise.
+In general, objects turn into Rust structs. If the schema defines no
+properties, typify emits a `HashMap<String, T>` (where `T` comes from
+`additionalProperties`) or `HashMap<String, serde_json::Value>` otherwise.
 
-Properties of generated `struct` that are not in the `required` set are
-typically represented as an `Option<T>` with the `#[serde(default)]` attribute
-applied. Non-required properties with types that already have a default value
-(such as a `Vec<T>`) simply get the `#[serde(default)]` attribute (so you won't
-see e.g. `Option<Vec<T>>`).
+Properties not in `required` are typically `Option<T>` with
+`#[serde(default)]`. Non-required properties whose Rust type already
+has a default value (such as `Vec<T>`) keep their type and get
+`#[serde(default, skip_serializing_if = ...)]` (so you don't see
+`Option<Vec<T>>`).
+
+Required properties whose Rust type has an intrinsic default get
+`#[serde(default)]` **alone** — see
+[Migration notes from 0.6.1](#migration-notes-from-061).
 
 #### Alternate Map types
 
-By default, Typify uses `std::collections::HashMap` as described above.
-
-If you prefer to use `std::collections::BTreeMap` or a map type from a crate such
-as `indexmap::IndexMap`, you can specify this by calling `with_map_type` on the
-`TypeSpaceSettings` object, and providing the full path to the type you want to
-use. E.g. `::std::collections::BTreeMap` or `::indexmap::IndexMap`.
-
-Note that for a custom map type to work you must have `T` defined to generate
-a struct as described in [Objects](#objects). If `T` is not defined, typify
-will generate code using a `serde_json::Map<String, serde_json::Value>` instead.
-
-See the documentation for `TypeSpaceSettings::with_map_type` for the
-requirements for a map type.
+By default, typify uses `std::collections::HashMap`. To use
+`std::collections::BTreeMap` or a third-party map (e.g.
+`indexmap::IndexMap`), call `with_map_type` on `TypeSpaceSettings`
+with the full path to the type. See
+`TypeSpaceSettings::with_map_type` for the trait requirements on
+custom map types.
 
 ### OneOf
 
-The `oneOf` construct maps to a Rust enum. Typify maps this to the various
-[serde enum types](https://serde.rs/enum-representations.html).
+`oneOf` maps to a Rust enum. Typify selects the appropriate
+[serde enum representation](https://serde.rs/enum-representations.html)
+(external, internal, adjacent, or untagged).
 
 ### AllOf
 
-The 'allOf' construct is handled by merging schemas. While most of the time,
-typify tries to preserve and share type names, it can't always do this when
-merging schemas. You may end up with fields replicated across type; optimizing
-this generation is an area of active work.
+`allOf` is handled by merging schemas. Typify tries to preserve and
+share type names where it can, but you may end up with replicated
+fields in some cases.
 
 ### AnyOf
 
-The `anyOf` construct maps to a Rust `#[serde(untagged)]` enum, similar to
-`oneOf`. Typify runs the same enum detection pipeline (external, internal,
-adjacent, untagged tagging) for `anyOf` schemas. This correctly handles
-`anyOf` with primitive types (strings, integers), mixed object/primitive
-schemas, and overlapping object properties.
+`anyOf` maps to a `#[serde(untagged)]` enum. Typify runs the same enum
+detection pipeline (external, internal, adjacent, untagged) as `oneOf`.
+This handles `anyOf` with primitive types (strings, integers), mixed
+object/primitive schemas, and overlapping object properties.
 
 ### AdditionalProperties
 
-The `additionalProperties` constraint lets a schema define what *non-specified*
-properties are permitted. A value of `false` means that no other properties are
-permitted (this is expressed in Rust with the `#[serde(deny_unknown_fields)]`
-annotation). The absence of `additionalProperties` or a value of `true` are
-equivalent constructions that mean that any other property is permitted.
-
-Without other properties, an object that permits additional properties will be
-represented as a map type. In conjunction with other properties, typify employs
-a heuristic interpretation. Absent or with a value of `true`, additional
-properties are ignored. If, however, `additionalProperties` has another value
-(i.e. a schema), the generated type will have a map field annotated with
-`#[serde(flatten)]`.
-
-Note that this is true of **any** schema value for `additionalProperties` that
-is not a boolean. This includes values that would be equivalent with regard to
-validation such as the schema `{}` or `{ "not": false }` or any of the other
-infinity of equivalent schemas. One can therefore construct a `struct` with
-named properties **and** a flattened map of additional properties by using a
-value for `additionalProperties` that is equivalent to `true` or absent with
-regard to validation, by using some e.g. `{}`.
+`additionalProperties: false` becomes `#[serde(deny_unknown_fields)]`.
+A missing `additionalProperties` (or `true`) means any other property
+is permitted and silently ignored. When `additionalProperties` is a
+schema, the struct gets a `#[serde(flatten)]` map field of the
+appropriate value type.
 
 ### If / Then / Else
 
-JSON Schema's `if`/`then`/`else` construct is transformed into a `oneOf`:
-the `then` branch becomes `allOf(if, then)` and the `else` branch becomes
-`allOf(not(if), else)`. The result is a Rust enum with variants for each
+`if`/`then`/`else` is transformed into a `oneOf`: the `then` branch
+becomes `allOf(if, then)`, and the `else` branch becomes
+`allOf(not(if), else)`. The result is a Rust enum with one variant per
 branch.
 
 ### Not
 
-The `not` construct is supported for schemas with enumerated values (creating
-a "deny list" newtype that rejects those values). For more complex `not`
-schemas (e.g., `not: { type: "object" }`), typify falls back to
-`serde_json::Value`.
+`not` with enumerated values produces a deny-list newtype that rejects
+those values at construction. More complex `not` schemas (e.g.,
+`not: { type: "object" }`) fall back to `serde_json::Value`.
 
-### JSON Schema 2020-12 Support
+### JSON Schema 2020-12 / 2019-09
 
-Typify supports JSON Schema 2020-12 (and 2019-09) via automatic
-normalization. When a schema declares `"$schema":
-"https://json-schema.org/draft/2020-12/schema"`, the following keywords are
-transparently converted to their draft-07 equivalents before processing:
+Typify normalizes these drafts to draft-07 before processing:
 
-| 2020-12 keyword | Transformed to |
-|-----------------|---------------|
+| 2020-12 keyword | Lowered to |
+|-----------------|-----------|
 | `$defs` | `definitions` |
 | `prefixItems` + `items` | `items` (array) + `additionalItems` |
 | `$ref` alongside other keywords | `allOf` wrapping |
@@ -153,16 +274,14 @@ transparently converted to their draft-07 equivalents before processing:
 | `unevaluatedProperties` | `additionalProperties` (best-effort) |
 | `$dynamicRef` | `$ref` (best-effort) |
 
-Use `add_schema_from_value()` instead of `add_root_schema()` to enable
-auto-detection and normalization.
+Use `add_schema_from_value()` to enable auto-detection and
+normalization. `cargo typify` does this automatically.
 
-### External References
+### External references
 
-Typify supports `$ref` pointing to external files (e.g.,
-`"$ref": "other-file.json#/definitions/Foo"`). External schemas are bundled
-into the root schema's definitions before processing.
-
-Use `add_schema_with_externals()` to provide a map of external schemas:
+`$ref` can point to external files (e.g.
+`"other-file.json#/definitions/Foo"`). Use
+`add_schema_with_externals()` to provide a map of external schemas:
 
 ```rust
 let mut externals = BTreeMap::new();
@@ -170,18 +289,18 @@ externals.insert("types.json".to_string(), types_json_value);
 type_space.add_schema_with_externals(main_schema_value, externals)?;
 ```
 
-Non-standard internal references (e.g., `$ref: "#/properties/foo"`) are also
-automatically resolved.
+Non-standard internal references (e.g.
+`$ref: "#/properties/foo"`) are also resolved automatically.
 
-## Rust -> Schema -> Rust
+## Rust → Schema → Rust
 
-Schemas derived from Rust types may include an extension that provides
-information about the original type:
+Schemas derived from Rust types may include an `x-rust-type`
+extension that provides information about the original type:
 
 ```json
 {
   "type": "object",
-  "properties": { .. },
+  "properties": { },
   "x-rust-type": {
     "crate": "crate-o-types",
     "version": "1.0.0",
@@ -190,88 +309,82 @@ information about the original type:
 }
 ```
 
-The extension includes the name of the crate, a Cargo-style version
-requirements spec, and the full path (that must start with ident-converted name
-of the crate).
+The extension includes the crate name, a Cargo-style version
+requirement, and the full path (which must start with the
+ident-converted crate name).
 
-Each of the modes of using typify allow for a list of crates and versions to be
-specified. In this case, if the user specifies "crate-o-types@1.0.1" for
-example, then typify would use its `SomeType` type rather than generating one
-according to the schema.
+Each typify entry point lets you specify a list of crates and
+versions. If the user specifies `crate-o-types@1.0.1`, typify uses the
+specified `SomeType` instead of generating one from the schema.
 
 ### Using types from other crates
 
-Each mode of using typify has a method for controlling the use of types with
-`x-rust-type` annotations. The default is to ignore them. The recommended
-method is to specify each crate and version you intend to use. You can
-additionally supply the `*` version for crates (which may result in
-incompatibilities) or you can define a policy to allow the use of all "unknown"
-crates (which may require that addition of dependencies for those crates).
+Each mode of using typify has a method for controlling the use of
+types with `x-rust-type` annotations. The default is to ignore them.
+The recommended method is to specify each crate and version you
+intend to use. You can also supply `*` as the version (which may
+result in incompatibilities), or define a policy to allow the use of
+all "unknown" crates (which may require adding dependencies for those
+crates).
 
-For the CLI:
+CLI:
 ```console
-$ cargo typify --unknown-crates allow --crate oxnet@1.0.0 ...
+$ cargo typify --unknown-crates allow --crate oxnet@1.0.0 schema.json
 ```
 
-For the builder:
+Builder:
 ```rust
 let mut settings = typify::TypeSpaceSettings::default();
-settings.with_unknown_crates(typify::UnknownPolicy::Allow)
-    .with_crate("oxnet", typify::CrateVers::Version("1.0.0".parse().unwrap()));
+settings
+    .with_unknown_crates(typify::UnknownPolicy::Allow)
+    .with_crate("oxnet", typify::CrateVers::Version("1.0.0".parse().unwrap()), None);
 ```
 
-For the macro:
+Macro:
 ```rust
 typify::import_types!(
-  schema = "schema.json",
-  unknown_crates = Allow,
-  crates = {
-    "oxnet" = "1.0.0"
-  }
-)
+    schema = "schema.json",
+    unknown_crates = Allow,
+    crates = {
+        "oxnet" = "1.0.0",
+    },
+);
 ```
 
 ### Version requirements
 
-The `version` field within the `x-rust-type` extension follows the Cargo
-version requirements specification. If the extension specifies `0.1.0` of a
-crate and the user states that they're using `0.1.1`, then the type is used;
-conversely, if the extension specifies `0.2.2` and the user is only using
-`0.2.0` the type is not used.
+The `version` field follows the Cargo version requirements spec. If
+the extension specifies `0.1.0` and the user is using `0.1.1`, the
+type is used; if the extension specifies `0.2.2` and the user is on
+`0.2.0`, the type is not used.
 
-Crate authors may choose to adhere to greater stability than otherwise provided
-by semver. If the extension version is `>=0.1.0, <1.0.0` then the crate author
-is committing to the schema compatibility of the given type on all releases
-until `1.0.0`. It is important that crate authors populate the `version` field
-in a way that upholds type availability. For example, while `*` is a valid
-value, it is only conceivably valid if the type in question were available in
-the first ever version of a crate published and never changed incompatibly in
-any subsequent version.
+Crate authors can commit to greater-than-semver stability with
+explicit ranges. `>=0.1.0, <1.0.0` means the type stays
+schema-compatible across all releases until 1.0.0. Authors should
+populate `version` carefully to uphold type availability.
 
 ### Type parameters
 
-The `x-rust-type` extension may also specify type parameters:
+`x-rust-type` may specify type parameters:
 
 ```json
 {
   "$defs": {
     "Sprocket": {
       "type": "object",
-      "properties": { .. },
+      "properties": { },
       "x-rust-type": {
         "crate": "util",
         "version": "0.1.0",
         "path": "util::Sprocket",
         "parameters": [
-          {
-            "$ref": "#/$defs/Gizmo"
-          }
+          { "$ref": "#/$defs/Gizmo" }
         ]
       }
     },
     "Gizmo": {
       "type": "object",
-      "properties": { .. },
+      "properties": { },
       "x-rust-type": {
         "crate": "util",
         "version": "0.1.0",
@@ -282,115 +395,63 @@ The `x-rust-type` extension may also specify type parameters:
 }
 ```
 
-With the `util@0.1.0` crate specified during type generation, schemas
-referencing `#/$defs/Sprocket` would use the (non-generated) type
-`util::Sprocket<util::Gizmo>`.
-
-The `parameters` field is an array of schemas. They may be inline schemas or
+With `util@0.1.0` specified, references to `#/$defs/Sprocket` use the
+type `util::Sprocket<util::Gizmo>`. Parameters may be inline or
 referenced schemas.
 
 ### Including `x-rust-type` in your library
 
-The schema for the expected value is as follows:
+The schema for the extension value:
 
 ```json
 {
   "description": "schema for the x-rust-type extension",
   "type": "object",
   "properties": {
-    "crate": {
-      "type": "string",
-      "pattern": "^[a-zA-Z0-9_-]+$"
-    },
-    "version": {
-      "description": "semver requirements per a Cargo.toml dependencies entry",
-      "type": "string"
-    },
-    "path": {
-      "type": "string",
-      "pattern": "^[a-zA-Z0-9_]+(::[a-zA-Z0-9+]+)*$"
-    },
+    "crate":   { "type": "string", "pattern": "^[a-zA-Z0-9_-]+$" },
+    "version": { "type": "string", "description": "semver requirement per Cargo.toml" },
+    "path":    { "type": "string", "pattern": "^[a-zA-Z0-9_]+(::[a-zA-Z0-9+]+)*$" },
     "parameters": {
       "type": "array",
-      "items": {
-        "$ref": "#/definitions/Schema"
-      }
+      "items": { "$ref": "#/definitions/Schema" }
     }
   },
-  "required": [
-    "crate",
-    "path",
-    "version"
-  ]
+  "required": ["crate", "path", "version"]
 }
 ```
 
-The `version` field expresses the stability of your type. For example, if
-`0.1.0` indicates that `0.1.1` users would be fine whereas `0.2.0` users would
-not use the type (instead generating it). You can communicate a future
-commitment beyond what semver implies by using the [Cargo version requirement
-syntax](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#version-requirement-syntax).
-For example `>=0.1.0, <1.0.0` says that the type will remain structurally
-compatible from version `0.1.0` until `1.0.0`.
-
 ## Formatting
 
-You can format generated code using crates such as
-[rustfmt-wrapper](https://docs.rs/rustfmt-wrapper) and
-[prettyplease](https://docs.rs/prettyplease). This can be particularly useful
-when checking in code or emitting code from a `build.rs`.
-
-The examples below show different ways to convert a `TypeSpace` to a string
-(`typespace` is a `typify::TypeSpace`).
-
-
-### `rustfmt`
-
-Best for generation of code that might be checked in alongside hand-written
-code such as in the case of an `xtask` or stand-alone code generator (such as
-`cargo-typify`).
+Pair `TypeSpace::to_stream()` with `prettyplease` (zero external
+dependencies, suitable for `build.rs`) or `rustfmt-wrapper`
+(idiomatic output, requires `rustfmt`):
 
 ```rust
-rustfmt_wrapper::rustfmt(typespace.to_stream().to_string())?
-```
-
-### `prettyplease`
-
-Best for `build.rs` scripts where transitive dependencies might not have
-`rustfmt` installed so should be self-contained.
-
-```rust
+// prettyplease — best for build.rs
 prettyplease::unparse(&syn::parse2::<syn::File>(typespace.to_stream())?)
 ```
 
-### No formatting
-
-If no human will ever see the code (and this is almost never the case).
+```rust
+// rustfmt — best for checked-in generation
+rustfmt_wrapper::rustfmt(typespace.to_stream().to_string())?
+```
 
 ```rust
+// no formatting — only if no human will ever read it
 typespace.to_stream().to_string()
 ```
 
-## WIP
+## License
 
-Typify is a work in progress. Changes that affect output will be indicated with
-a breaking change to the crate version number.
+Apache-2.0. Original work © Oxide Computer Company; modifications ©
+barbacane-dev contributors. See [`LICENSE`](./LICENSE).
 
-In general, if you have a JSON Schema that causes Typify to fail or if the
-generated type isn't what you expect, please file an issue.
+## Acknowledgements
 
-There are some known areas where we'd like to improve:
-
-### Complex JSON Schema types
-
-JSON schema can express a wide variety of types. Some of them are easy to model
-in Rust; others aren't. There's a lot of work to be done to handle esoteric
-types. Examples from users are very helpful in this regard.
-
-### Configurable dependencies
-
-A string schema with `format` set to `uuid` will result in the `uuid::Uuid`
-type; similarly, a `format` of `date` translates to
-`chrono::naive::NaiveDate`. For users that don't want dependencies on
-`uuid` or `chrono` it would be useful for Typify to optionally represent those
-as `String` (or as some other, consumer-specified type).
+This project is a fork of
+[oxidecomputer/typify](https://github.com/oxidecomputer/typify) at
+the 0.6.1 baseline. All credit for the original architecture and
+substantial portions of the code goes to its authors. The fork exists
+to ship JSON Schema 2020-12 coverage, external `$ref` support, and a
+catalogue of long-standing bug fixes on a schedule independent of
+upstream.
