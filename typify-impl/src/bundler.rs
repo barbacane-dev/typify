@@ -178,32 +178,60 @@ fn resolve_external_ref(
         }
     };
 
-    // Generate a unique name
+    // Generate a unique name and reserve it. Insert into `rewrites`
+    // before recursing so circular refs see the in-progress entry and
+    // terminate instead of looping.
     let base_name = generate_external_name(&doc_uri, &fragment);
     let name = make_unique_name(&base_name, used_names);
     used_names.insert(name.clone());
-
-    // Register as a definition
-    if let Ok(parsed) = serde_json::from_value::<schemars::schema::Schema>(sub_schema.clone()) {
-        definitions.insert(name.clone(), parsed);
-    }
-
     rewrites.insert(ref_str.to_string(), format!("#/definitions/{}", name));
 
-    // Recursively resolve refs within the external schema
+    // Walk every ref inside the copied sub-schema. For each:
+    //  - external ref (no leading `#`) — resolve as before.
+    //  - internal ref (`#/definitions/X`) — refers to a sibling
+    //    definition in the same external document. The bundler must
+    //    pull that sibling into the root's definitions and rewrite the
+    //    internal ref to the new bundled name, otherwise the copied
+    //    sub-schema points into a namespace that no longer exists.
+    //
+    // We treat each internal ref as a synthetic external ref
+    // `{doc_uri}{#fragment}` and recurse — that produces a single,
+    // shared bundled definition no matter how many places mention it.
     let nested_refs = collect_refs(&sub_schema);
+    let mut local_rewrites: BTreeMap<String, String> = BTreeMap::new();
     for nested_ref in nested_refs {
-        if !nested_ref.starts_with('#') {
-            // Resolve relative to the same document's directory
-            resolve_external_ref(
-                &nested_ref,
-                external_schemas,
-                definitions,
-                rewrites,
-                used_names,
-                visited,
-            );
+        let synthetic_target = if let Some(internal) = nested_ref.strip_prefix('#') {
+            format!("{}#{}", doc_uri, internal)
+        } else {
+            nested_ref.clone()
+        };
+
+        resolve_external_ref(
+            &synthetic_target,
+            external_schemas,
+            definitions,
+            rewrites,
+            used_names,
+            visited,
+        );
+
+        if nested_ref.starts_with('#') {
+            if let Some(new_target) = rewrites.get(&synthetic_target) {
+                local_rewrites.insert(nested_ref, new_target.clone());
+            }
         }
+    }
+
+    // Apply the locally-collected rewrites to this sub-schema before
+    // registering it, so internal refs in the copied definition resolve
+    // to their bundled siblings.
+    let mut bundled_schema = sub_schema;
+    if !local_rewrites.is_empty() {
+        rewrite_refs(&mut bundled_schema, &local_rewrites);
+    }
+
+    if let Ok(parsed) = serde_json::from_value::<schemars::schema::Schema>(bundled_schema) {
+        definitions.insert(name, parsed);
     }
 }
 
@@ -457,6 +485,77 @@ mod tests {
             let ref_str = obj.reference.as_ref().unwrap();
             assert!(ref_str.starts_with("#/definitions/"), "got: {}", ref_str);
         }
+    }
+
+    #[test]
+    fn test_bundle_external_with_internal_sibling_ref() {
+        // External `types.json` has `Outer` that references its sibling
+        // `Inner` via an internal `#/definitions/Inner` ref. After
+        // bundling, both must be present in the root definitions and
+        // `Outer`'s ref must be rewritten to point at the bundled
+        // `Inner` (not the original namespace, which no longer exists).
+        let mut schema = root_schema_from_json(json!({
+            "type": "object",
+            "properties": {
+                "outer": { "$ref": "types.json#/definitions/Outer" }
+            }
+        }));
+
+        let mut externals = BTreeMap::new();
+        externals.insert(
+            "types.json".to_string(),
+            json!({
+                "definitions": {
+                    "Outer": {
+                        "type": "object",
+                        "properties": {
+                            "inner": { "$ref": "#/definitions/Inner" }
+                        }
+                    },
+                    "Inner": { "type": "string" }
+                }
+            }),
+        );
+
+        bundle_external_refs(&mut schema, &externals);
+
+        // The root `outer` ref points at the bundled Outer.
+        let outer = &schema.schema.object.as_ref().unwrap().properties["outer"];
+        let outer_ref = if let schemars::schema::Schema::Object(obj) = outer {
+            obj.reference.clone().unwrap()
+        } else {
+            panic!("expected schema object")
+        };
+        let outer_name = outer_ref.strip_prefix("#/definitions/").unwrap();
+
+        // Both Outer and Inner are bundled.
+        let outer_def = schema.definitions.get(outer_name).unwrap();
+        let inner_ref = if let schemars::schema::Schema::Object(obj) = outer_def {
+            obj.object
+                .as_ref()
+                .unwrap()
+                .properties
+                .get("inner")
+                .and_then(|s| {
+                    if let schemars::schema::Schema::Object(o) = s {
+                        o.reference.clone()
+                    } else {
+                        None
+                    }
+                })
+                .unwrap()
+        } else {
+            panic!("expected schema object")
+        };
+
+        // Outer's nested ref is rewritten to the bundled Inner — not
+        // the original `#/definitions/Inner` that no longer exists.
+        let inner_name = inner_ref.strip_prefix("#/definitions/").unwrap();
+        assert!(
+            schema.definitions.contains_key(inner_name),
+            "rewritten inner ref {} not found in definitions",
+            inner_ref
+        );
     }
 
     #[test]
