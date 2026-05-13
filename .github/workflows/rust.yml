@@ -1,34 +1,90 @@
 #
-# Configuration for GitHub-based CI
+# Configuration for GitHub-based CI.
 #
-name: Build
+# Runs fmt / clippy / tests / docs / advisories / MSRV in parallel on
+# every PR and every push to main. All jobs share a Swatinem cargo
+# cache keyed off Cargo.lock. Toolchain is `stable` everywhere except
+# the MSRV job, which pins Rust 1.82.
+#
+name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: 1
 
 jobs:
-  check-style:
+  fmt:
+    name: cargo fmt
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Report cargo version
-      run: cargo --version
-    - name: Report rustfmt version
-      run: cargo fmt -- --version
-    - name: Check style
-      run: cargo fmt -- --check
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all -- --check
 
-  build-and-test:
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      # typify-test only exists to compile typify's generated output; the
+      # warnings it surfaces (clippy::derivable_impls, redundant_closure)
+      # belong to the codegen, not source code, and are tracked separately.
+      - run: cargo clippy --workspace --all-targets --locked --exclude typify-test -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-    - uses: actions/checkout@v2
-    - name: Build
-      run: cargo build --locked --tests --verbose
-    - name: Run tests
-      run: cargo test --locked --verbose
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --workspace --locked --tests --verbose
+      - name: Test
+        run: cargo test --workspace --locked --verbose
+
+  doc:
+    name: cargo doc
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo doc --workspace --no-deps --locked
+
+  deny:
+    name: cargo deny (advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
+
+  msrv:
+    name: MSRV build (1.82)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.82
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --workspace --locked
