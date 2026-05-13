@@ -13,6 +13,9 @@
 
 == Unreleased changes (barbacane-dev fork)
 
+=== Tests / docs
+* tighten the multi-type `type` + subschemas regression fixture and code comment, per upstream review feedback on https://github.com/oxidecomputer/typify/pull/1001[oxidecomputer/typify#1001]: drop the `SingleTypeOneOfArrayBranch` case (whose contradictory schema caused codegen to emit an unreachable enum variant), trim verbose `$comment` rationales, and shorten the match-arm doc comment in `convert.rs`
+
 https://github.com/barbacane-dev/typify/compare/v1.0.0\...HEAD[Full list of commits]
 
 == 1.0.0 (released 2026-05-13)
