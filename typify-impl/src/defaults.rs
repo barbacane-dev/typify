@@ -596,7 +596,7 @@ fn all_props<'a>(
 
     if let Some(name) = maybe_name {
         let required = match &property.state {
-            StructPropertyState::Required => true,
+            StructPropertyState::Required | StructPropertyState::RequiredWithDefault => true,
             StructPropertyState::Optional | StructPropertyState::Default(_) => false,
         };
 

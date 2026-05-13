@@ -180,7 +180,7 @@ impl Point {
 #[serde(deny_unknown_fields)]
 pub struct Shape {
     pub kind: ::std::string::String,
-    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    #[serde(default)]
     pub points: ::std::vec::Vec<Point>,
 }
 impl Shape {

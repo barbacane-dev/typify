@@ -114,6 +114,14 @@ mod required_defaults {
     include!(concat!(env!("OUT_DIR"), "/codegen_required_defaults.rs"));
 }
 
+mod required_implicit_defaults {
+    #![allow(dead_code)]
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/codegen_required_implicit_defaults.rs"
+    ));
+}
+
 mod dscp {
     #![allow(dead_code)]
     include!(concat!(env!("OUT_DIR"), "/codegen_dscp.rs"));
@@ -194,6 +202,90 @@ fn test_required_with_defaults_deserialize_partial() {
         serde_json::from_str(r#"{"name": "foo"}"#).unwrap();
     assert_eq!(v.name, "foo");
     assert_eq!(v.count, 0);
+}
+
+// --- Required fields with intrinsic Rust defaults (Vec, Map) ---
+//
+// The schema marks `tags` and `metadata` as required, but their Rust
+// types (Vec, HashMap) have an intrinsic default. Generated code must
+// (a) accept a missing field on deserialize (via `#[serde(default)]`)
+// and (b) always emit the field on serialize (no `skip_serializing_if`),
+// since the schema's wire contract still says required.
+
+#[test]
+fn test_required_implicit_defaults_deserialize_empty() {
+    // Deserializing `{}` must succeed — `#[serde(default)]` fills in
+    // the intrinsic defaults for required Vec/Map fields.
+    let v: required_implicit_defaults::RequiredCollections = serde_json::from_str("{}").unwrap();
+    assert!(v.tags.is_empty());
+    assert!(v.metadata.is_empty());
+}
+
+#[test]
+fn test_required_implicit_defaults_deserialize_partial() {
+    let v: required_implicit_defaults::RequiredCollections =
+        serde_json::from_str(r#"{"tags": ["a", "b"]}"#).unwrap();
+    assert_eq!(v.tags, vec!["a".to_string(), "b".to_string()]);
+    assert!(v.metadata.is_empty());
+}
+
+#[test]
+fn test_required_implicit_defaults_serialize_emits_required_fields() {
+    // Serializing the default value must include both required fields
+    // even though they're empty — the schema marks them required, so
+    // `skip_serializing_if` must NOT be emitted.
+    let v = required_implicit_defaults::RequiredCollections::default();
+    let json: serde_json::Value = serde_json::to_value(&v).unwrap();
+    let obj = json.as_object().unwrap();
+    assert!(
+        obj.contains_key("tags"),
+        "required `tags` must be present on the wire, got: {}",
+        json
+    );
+    assert!(
+        obj.contains_key("metadata"),
+        "required `metadata` must be present on the wire, got: {}",
+        json
+    );
+    // Confirm the values are the intrinsic empties.
+    assert_eq!(obj["tags"], serde_json::json!([]));
+    assert_eq!(obj["metadata"], serde_json::json!({}));
+}
+
+#[test]
+fn test_mixed_required_and_optional_serialization() {
+    // Required collection is always emitted; optional one with
+    // intrinsic default is skipped when empty (legacy behaviour).
+    let v = required_implicit_defaults::MixedRequiredAndOptional::default();
+    let json: serde_json::Value = serde_json::to_value(&v).unwrap();
+    let obj = json.as_object().unwrap();
+    assert!(
+        obj.contains_key("required_tags"),
+        "required field missing from output: {}",
+        json
+    );
+    assert!(
+        !obj.contains_key("optional_tags"),
+        "optional empty field should be skipped, got: {}",
+        json
+    );
+}
+
+#[test]
+fn test_required_implicit_defaults_roundtrip() {
+    // Serialize-then-deserialize must preserve content for required
+    // collection fields.
+    let mut original = required_implicit_defaults::RequiredCollections::default();
+    original.tags.push("alpha".to_string());
+    original
+        .metadata
+        .insert("env".to_string(), "prod".to_string());
+
+    let json = serde_json::to_string(&original).unwrap();
+    let back: required_implicit_defaults::RequiredCollections =
+        serde_json::from_str(&json).unwrap();
+    assert_eq!(back.tags, original.tags);
+    assert_eq!(back.metadata, original.metadata);
 }
 
 // --- PR #986: TryFrom for bounded integers ---

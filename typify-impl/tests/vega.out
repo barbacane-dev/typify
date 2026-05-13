@@ -5545,7 +5545,7 @@ pub enum ArrayValueVariant0ItemVariant0 {
         scale: ::std::option::Option<Field>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         test: ::std::option::Option<::std::string::String>,
-        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        #[serde(default)]
         value: ::std::vec::Vec<::serde_json::Value>,
     },
     Variant2 {
@@ -6071,7 +6071,7 @@ pub enum ArrayValueVariant1Variant0 {
     Variant1 {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         scale: ::std::option::Option<Field>,
-        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        #[serde(default)]
         value: ::std::vec::Vec<::serde_json::Value>,
     },
     Variant2 {
@@ -11144,7 +11144,7 @@ pub enum BaseColorValueVariant0Variant0 {
     Variant1 {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         scale: ::std::option::Option<Field>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        #[serde(default)]
         value: ::std::option::Option<::std::string::String>,
     },
     Variant2 {
@@ -14159,7 +14159,7 @@ pub enum Bind {
         labels: ::std::vec::Vec<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         name: ::std::option::Option<::std::string::String>,
-        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        #[serde(default)]
         options: ::std::vec::Vec<::serde_json::Value>,
     },
     Variant2 {
@@ -14946,7 +14946,7 @@ pub enum BlendValueVariant0ItemVariant0 {
         scale: ::std::option::Option<Field>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         test: ::std::option::Option<::std::string::String>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        #[serde(default)]
         value: ::std::option::Option<BlendValueVariant0ItemVariant0Variant1Value>,
     },
     Variant2 {
@@ -15681,7 +15681,7 @@ pub enum BlendValueVariant1Variant0 {
     Variant1 {
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         scale: ::std::option::Option<Field>,
-        #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
+        #[serde(default)]
         value: ::std::option::Option<BlendValueVariant1Variant0Variant1Value>,
     },
     Variant2 {
@@ -81095,13 +81095,13 @@ pub enum ScaleData {
     },
     Variant1 {
         data: ::std::string::String,
-        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        #[serde(default)]
         fields: ::std::vec::Vec<StringOrSignal>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         sort: ::std::option::Option<ScaleDataVariant1Sort>,
     },
     Variant2 {
-        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        #[serde(default)]
         fields: ::std::vec::Vec<ScaleDataVariant2FieldsItem>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         sort: ::std::option::Option<ScaleDataVariant2Sort>,
@@ -84387,13 +84387,13 @@ pub enum ScaleVariant1RangeVariant3 {
     },
     Variant1 {
         data: ::std::string::String,
-        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        #[serde(default)]
         fields: ::std::vec::Vec<StringOrSignal>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         sort: ::std::option::Option<ScaleVariant1RangeVariant3Variant1Sort>,
     },
     Variant2 {
-        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        #[serde(default)]
         fields: ::std::vec::Vec<ScaleVariant1RangeVariant3Variant2FieldsItem>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         sort: ::std::option::Option<ScaleVariant1RangeVariant3Variant2Sort>,
@@ -92124,7 +92124,7 @@ pub enum Stream {
         markname: ::std::option::Option<::std::string::String>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         marktype: ::std::option::Option<::std::string::String>,
-        #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+        #[serde(default)]
         merge: ::std::vec::Vec<Stream>,
         #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
         throttle: ::std::option::Option<f64>,

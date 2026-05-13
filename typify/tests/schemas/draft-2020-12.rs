@@ -192,7 +192,7 @@ impl TaggedValue {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Team {
-    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    #[serde(default)]
     pub members: ::std::vec::Vec<Person>,
     #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub metadata: ::std::option::Option<::serde_json::Value>,

@@ -170,6 +170,47 @@ fn main() {
         "codegen_required_defaults.rs",
     );
 
+    // Required fields whose Rust types have an intrinsic default
+    // (Vec, Map). Tests that the generated code emits
+    // `#[serde(default)]` (lenient deserialize) without
+    // `skip_serializing_if` (serialize always emits the field, since
+    // the schema marks it required on the wire).
+    generate_from_json_schema(
+        r#"{
+            "definitions": {
+                "RequiredCollections": {
+                    "type": "object",
+                    "required": ["tags", "metadata"],
+                    "properties": {
+                        "tags": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        },
+                        "metadata": {
+                            "type": "object",
+                            "additionalProperties": { "type": "string" }
+                        }
+                    }
+                },
+                "MixedRequiredAndOptional": {
+                    "type": "object",
+                    "required": ["required_tags"],
+                    "properties": {
+                        "required_tags": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        },
+                        "optional_tags": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        }"#,
+        "codegen_required_implicit_defaults.rs",
+    );
+
     // PR #986: Bounded integer newtypes
     generate_from_json_schema(
         r#"{

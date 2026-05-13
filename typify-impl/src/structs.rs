@@ -134,12 +134,23 @@ impl TypeSpace {
         let state = if required.contains(prop_name) {
             // Even required fields may have an explicit default value
             // specified in the schema. If so, we use it for the Default impl
-            // and builder pre-population (and also make serde more lenient).
-            has_default(
+            // and builder pre-population (and also make deserialization
+            // more lenient — but NOT serialization, since the schema
+            // still requires the field on the wire).
+            match has_default(
                 self,
                 &type_id,
                 metadata.as_ref().and_then(|m| m.default.as_ref()),
-            )
+            ) {
+                // `Optional` here means an intrinsic-default type
+                // (Vec, Option, Map, …) with no explicit schema
+                // default. Promote to RequiredWithDefault so that
+                // `generate_serde_attr` emits `#[serde(default)]`
+                // (lenient deserialize) without `skip_serializing_if`
+                // (serialization always emits the required field).
+                StructPropertyState::Optional => StructPropertyState::RequiredWithDefault,
+                other => other,
+            }
         } else {
             // We can use serde's `default` and `skip_serializing_if`
             // construction for options, arrays, and maps--i.e. properties that
@@ -342,6 +353,16 @@ pub(crate) fn generate_serde_attr(
         }
 
         (StructPropertyState::Required, _) => DefaultFunction::None,
+
+        // Required by the schema but with an intrinsic default for the
+        // Rust type. Emit `#[serde(default)]` so that deserializing a
+        // JSON object that lacks the field still succeeds (PR #918's
+        // intent), but DO NOT emit `skip_serializing_if`: the schema
+        // says the field is required on the wire.
+        (StructPropertyState::RequiredWithDefault, _) => {
+            serde_options.push(quote! { default });
+            DefaultFunction::Default
+        }
     };
 
     let serde = if serde_options.is_empty() {
