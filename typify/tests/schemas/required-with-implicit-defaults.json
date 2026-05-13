@@ -1,0 +1,53 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "RequiredWithImplicitDefaultsRoot",
+    "definitions": {
+        "RequiredCollections": {
+            "description": "Required fields whose Rust types have an intrinsic default (Vec, Map). The wire contract still says required, so the generated code must emit #[serde(default)] (lenient deserialize) without skip_serializing_if (always serialize).",
+            "type": "object",
+            "required": ["tags", "metadata"],
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" }
+                }
+            }
+        },
+        "RequiredCollectionsWithEmptyDefault": {
+            "description": "Same as above but with the implicit default written out explicitly in the schema; behaviour must be identical.",
+            "type": "object",
+            "required": ["tags", "metadata"],
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "default": []
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "default": {}
+                }
+            }
+        },
+        "MixedRequiredAndOptional": {
+            "description": "Mix of required collections and an optional one to confirm only the required variants drop skip_serializing_if.",
+            "type": "object",
+            "required": ["required_tags"],
+            "properties": {
+                "required_tags": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                },
+                "optional_tags": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                }
+            }
+        }
+    }
+}

@@ -16,6 +16,7 @@
 === Bug fixes
 * fix untagged enum variant ordering: Integer now comes before Number to prevent unreachable deserialization (#991)
 * generate `Default` impl for structs where all required fields have explicit defaults (#918)
+* honour the JSON Schema `required` contract on serialization for fields whose Rust type has an intrinsic default (`Vec`, `HashMap`, `Option<T>`). Previously an empty/`None` required field was silently omitted because `skip_serializing_if` was applied; now `#[serde(default)]` is emitted alone, so deserialize stays lenient (`{}` parses) but serialize always renders the field. **Wire-format change**: payloads that previously omitted empty required fields will now render them as `[]`, `{}`, or `null`
 * generate `TryFrom` instead of `From` for bounded integer newtypes, enforcing min/max constraints (#986)
 * render integer `minimum`/`maximum` as integers (not floats) in doc comments (#843)
 * handle special characters in enum variant names (`=`, `>`, `≥`, etc.) without panicking (#948)

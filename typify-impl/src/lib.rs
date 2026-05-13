@@ -1327,7 +1327,10 @@ impl<'a> TypeStruct<'a> {
             .map(move |prop| TypeStructPropInfo {
                 name: prop.name.as_str(),
                 description: prop.description.as_deref(),
-                required: matches!(&prop.state, StructPropertyState::Required),
+                required: matches!(
+                    &prop.state,
+                    StructPropertyState::Required | StructPropertyState::RequiredWithDefault
+                ),
                 type_id: prop.type_id.clone(),
             })
     }

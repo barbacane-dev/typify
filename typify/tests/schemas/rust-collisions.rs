@@ -404,10 +404,7 @@ impl ::std::convert::From<[::std::string::String; 2usize]> for KeywordFieldsEnum
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct MapOfKeywords {
-    #[serde(
-        default,
-        skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
-    )]
+    #[serde(default)]
     pub keyword_map:
         ::std::collections::HashMap<::std::string::String, MapOfKeywordsKeywordMapValue>,
 }
@@ -597,7 +594,7 @@ pub struct NestedTypeCollisions {
     pub option_type: ::std::option::Option<NestedTypeCollisionsOptionType>,
     #[serde(rename = "type")]
     pub type_: TypeWithOptionField,
-    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    #[serde(default)]
     pub types: ::std::vec::Vec<TypeWithOptionField>,
 }
 impl NestedTypeCollisions {
@@ -1631,7 +1628,7 @@ impl TypeWithOptionField {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Vec {
-    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
+    #[serde(default)]
     pub items: ::std::vec::Vec<::std::string::String>,
 }
 impl ::std::default::Default for Vec {

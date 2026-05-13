@@ -54,10 +54,7 @@ pub mod error {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct TestGrammarForPatternProperties {
-    #[serde(
-        default,
-        skip_serializing_if = ":: std :: collections :: HashMap::is_empty"
-    )]
+    #[serde(default)]
     pub rules:
         ::std::collections::HashMap<TestGrammarForPatternPropertiesRulesKey, ::std::string::String>,
 }

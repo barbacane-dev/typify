@@ -223,6 +223,12 @@ pub(crate) enum StructPropertyRename {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum StructPropertyState {
     Required,
+    /// Required by the schema, but with an intrinsic default value
+    /// (e.g. `Vec::new()`, `None`) — emit `#[serde(default)]` so
+    /// deserializing `{}` succeeds (PR #918), but DON'T emit
+    /// `skip_serializing_if`: the schema marks the field required, so
+    /// it must always be present on the wire.
+    RequiredWithDefault,
     Optional,
     Default(WrappedValue),
 }
