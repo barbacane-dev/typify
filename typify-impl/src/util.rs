@@ -51,6 +51,7 @@ pub(crate) fn metadata_title_and_description(metadata: &Option<Box<Metadata>>) -
 /// conceptually identical to the logic below that validates **if** the schemas
 /// **could** be merged (i.e. if they're compatible).
 #[cfg(test)]
+#[allow(dead_code)]
 pub(crate) fn all_mutually_exclusive(
     subschemas: &[Schema],
     definitions: &BTreeMap<RefKey, Schema>,
@@ -573,6 +574,7 @@ pub(crate) fn ref_key(ref_name: &str) -> RefKey {
 }
 
 #[cfg(test)]
+#[allow(dead_code)]
 fn resolve<'a>(
     schema: &'a Schema,
     definitions: &'a std::collections::BTreeMap<RefKey, Schema>,
