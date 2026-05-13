@@ -1,30 +1,20 @@
 # cargo-deny configuration.
 #
-# CI runs `cargo deny check advisories`. The ignore list below covers
-# unmaintained-crate advisories and one CVE that all enter the tree
-# transitively through dev-dependencies; none affect published crate
-# code paths. Re-evaluate when bumping or removing the cited dep.
+# CI runs `cargo deny check advisories`. The remaining ignore list
+# covers two unmaintained-crate advisories that we cannot clear from
+# our side: both come in transitively via dev-dependencies that we
+# don't control. Re-evaluate when bumping or removing the cited dep.
 
 [advisories]
 ignore = [
     # adler 1.0.2 — unmaintained, superseded by adler2.
-    # Pulled in transitively by miniz_oxide. Wait for the ecosystem to
-    # migrate (mostly through flate2/png updates).
+    # Pulled in transitively by miniz_oxide (→ flate2/png). Waiting on
+    # the ecosystem to migrate; nothing to do on our end.
     "RUSTSEC-2025-0056",
 
     # paste 1.0.15 — unmaintained, see pastey / with_builtin_macros.
-    # Used by both typify's generated code (paste in workspace deps)
-    # and several transitive deps. Worth replacing in generated output.
+    # Pulled in transitively by schema-derive (a dev-dep of
+    # typify-impl). Cannot clear without dropping the `schema` test
+    # crate or waiting for it to migrate. Not a security issue.
     "RUSTSEC-2024-0436",
-
-    # tempdir 0.3.7 — deprecated in favour of tempfile.
-    # Dev-dependency of cargo-typify only (integration tests). TODO:
-    # swap to tempfile and drop both this and RUSTSEC-2023-0018.
-    "RUSTSEC-2018-0017",
-
-    # remove_dir_all 0.5.3 — race-condition CVE.
-    # Reaches the tree only via tempdir (above) in cargo-typify dev
-    # tests. No production code path. Cleared automatically once the
-    # tempdir → tempfile swap above lands.
-    "RUSTSEC-2023-0018",
 ]
