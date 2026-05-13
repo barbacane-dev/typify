@@ -27,6 +27,9 @@
 * replace panics in `ref_key()` and `convert_reference()` with proper error returns
 * generate Rust tuples from 2020-12 `prefixItems` + `items: false` (#955)
 
+=== Chores
+* replace deprecated `tempdir` dev-dependency with `tempfile`, clearing RUSTSEC-2023-0018 (`remove_dir_all` race-condition CVE) and RUSTSEC-2018-0017 from the advisory ignore list
+
 === New features
 * JSON Schema `if`/`then`/`else` support via transformation to `oneOf` (#480)
 * JSON Schema 2020-12 and 2019-09 support via automatic normalization (#579)
